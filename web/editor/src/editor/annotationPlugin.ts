@@ -13,7 +13,7 @@ type AnnotationMeta =
   | {
       type: 'setAnnotations';
       annotations: EditAnnotation[];
-      activeId?: number;
+      activeId?: number | null;
       shouldRender?: boolean;
       markDirty?: boolean;
     }
@@ -33,7 +33,8 @@ export function createAnnotationPlugin(onActivate: (id: number) => void): Plugin
         const meta = transaction.getMeta(annotationPluginKey) as AnnotationMeta | undefined;
 
         if (meta?.type === 'setAnnotations') {
-          const activeId = meta.activeId ?? pluginState.activeId;
+          const hasActiveId = Object.prototype.hasOwnProperty.call(meta, 'activeId');
+          const activeId = hasActiveId ? meta.activeId ?? undefined : pluginState.activeId;
           return {
             annotations: meta.annotations,
             decorations: buildDecorations(newState.doc, meta.annotations, activeId),
@@ -105,7 +106,7 @@ export function setAnnotations(transaction: Transaction, annotations: EditAnnota
 export function replaceAnnotations(
   transaction: Transaction,
   annotations: EditAnnotation[],
-  options: { activeId?: number; shouldRender?: boolean; markDirty?: boolean } = {},
+  options: { activeId?: number | null; shouldRender?: boolean; markDirty?: boolean } = {},
 ): Transaction {
   return transaction.setMeta(annotationPluginKey, {
     type: 'setAnnotations',

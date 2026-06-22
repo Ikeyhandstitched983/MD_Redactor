@@ -1,10 +1,9 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import { defaultMarkdownSerializer } from 'prosemirror-markdown';
 import type { EditAnnotation } from './types';
+import { sanitizeCommentForHtmlComment } from './reviewModel';
 
-type SerializableAnnotation = EditAnnotation & {
-  currentFragmentText?: string;
-};
+type SerializableAnnotation = EditAnnotation;
 
 export function serializeDocumentToMarkdown(doc: ProseMirrorNode): string {
   return defaultMarkdownSerializer.serialize(doc, { tightLists: true }).replace(/\n/g, '\r\n');
@@ -24,7 +23,7 @@ export function serializeMarkdownWithTags(cleanMarkdown: string, annotations: Se
 
   for (const annotation of ordered) {
     const fragmentText = (annotation.currentFragmentText || annotation.fragmentText || '').trim();
-    const fallback = annotation.rawTaggedMarkdown || buildTaggedFragment(annotation, annotation.fragmentMarkdown || fragmentText);
+    const fallback = buildTaggedFragment(annotation, annotation.fragmentMarkdown || fragmentText);
 
     if (annotation.from === undefined || annotation.to === undefined || fragmentText.length === 0) {
       unmapped.push(fallback);
@@ -71,7 +70,7 @@ export function buildTaggedFragment(annotation: Pick<EditAnnotation, 'id' | 'kin
 }
 
 function sanitizeComment(comment: string): string {
-  return normalizeLineEndings(comment).replaceAll('--', '- -').trimEnd();
+  return normalizeLineEndings(sanitizeCommentForHtmlComment(comment).value).trimEnd();
 }
 
 function normalizeLineEndings(value: string): string {

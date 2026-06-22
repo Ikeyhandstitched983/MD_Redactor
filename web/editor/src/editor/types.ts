@@ -8,6 +8,7 @@ export type EditAnnotation = {
   kind: EditAnnotationKind;
   from?: number;
   to?: number;
+  currentFragmentText?: string;
   rawTaggedMarkdown?: string;
   warning?: string;
 };

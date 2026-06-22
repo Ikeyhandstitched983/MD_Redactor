@@ -235,9 +235,26 @@ body {
 }
 
 .review-empty {
+  display: grid;
+  gap: 6px;
   margin: 0;
+  padding: 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.review-empty p {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.review-empty span {
   color: var(--text-muted);
   font-size: 14px;
+  line-height: 1.4;
 }
 
 .review-list {
@@ -301,6 +318,35 @@ body {
   color: var(--text);
   background: var(--surface-muted);
   font: 13px/1.4 "Segoe UI", system-ui, sans-serif;
+}
+
+.review-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.review-action-button {
+  flex: 1 1 0;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--surface);
+  font: 600 12px/1.2 "Segoe UI", system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.review-action-button:hover,
+.review-action-button:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+  background: var(--accent-soft);
+}
+
+.review-action-button-danger {
+  color: var(--error-text);
 }
 
 .review-warning,
@@ -386,4 +432,3 @@ body {
     bottom: 278px;
   }
 }
-

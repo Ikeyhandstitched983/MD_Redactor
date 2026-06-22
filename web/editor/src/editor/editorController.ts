@@ -13,6 +13,7 @@ import { createEditFromSelection } from './editCommands';
 import { parseTaggedMarkdown } from './markdownTags';
 import { serializeDocumentToMarkdown, serializeMarkdownWithTags } from './markdownSerializer';
 import { createEditorPlugins, parseMarkdownToDoc } from './prosemirrorSetup';
+import { sortAnnotationsForPanel } from './reviewModel';
 import type { EditAnnotation, EditDiagnostic, LoadedDocument } from './types';
 import { renderReviewPanel } from '../ui/reviewPanel';
 
@@ -173,6 +174,7 @@ export class EditorController {
         activateAnnotation(this.view, id);
         if (focusEditor) {
           this.view.focus();
+          this.scrollToAnnotation(id);
         }
 
         dispatchedActivation = true;
@@ -182,6 +184,33 @@ export class EditorController {
     if (!dispatchedActivation) {
       this.renderReviewPanel();
     }
+  }
+
+  private goToAnnotation(id: number): void {
+    this.selectAnnotation(id);
+    this.scrollToAnnotation(id);
+  }
+
+  private deleteAnnotation(id: number): void {
+    if (!this.view) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Удалить правку #${id}? Сам текст фрагмента останется в документе.`);
+    if (!confirmed) {
+      return;
+    }
+
+    const annotations = this.annotations.filter((annotation) => annotation.id !== id);
+    this.annotations = annotations;
+    this.activeId = this.activeId === id ? undefined : this.activeId;
+
+    this.view.dispatch(replaceAnnotations(this.view.state.tr, annotations, {
+      activeId: this.activeId ?? null,
+      markDirty: true,
+    }));
+
+    this.onInfo(`Правка #${id} удалена. Текст фрагмента остался в документе.`);
   }
 
   private updateAnnotationComment(id: number, comment: string): void {
@@ -195,13 +224,13 @@ export class EditorController {
 
     this.annotations = annotations;
     this.view.dispatch(replaceAnnotations(this.view.state.tr, annotations, {
-      activeId: this.activeId,
+      activeId: this.activeId ?? null,
       shouldRender: false,
       markDirty: true,
     }));
   }
 
-  private refreshAnnotationText(annotation: EditAnnotation): EditAnnotation & { currentFragmentText?: string } {
+  private refreshAnnotationText(annotation: EditAnnotation): EditAnnotation {
     if (!this.view || annotation.from === undefined || annotation.to === undefined) {
       return annotation;
     }
@@ -210,6 +239,19 @@ export class EditorController {
       ...annotation,
       currentFragmentText: this.view.state.doc.textBetween(annotation.from, annotation.to, ' ', ' ').trim(),
     };
+  }
+
+  private scrollToAnnotation(id: number): void {
+    if (!this.view) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      const target = this.view?.dom.querySelector<HTMLElement>(`[data-edit-id="${id}"]`);
+      if (target) {
+        target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+      }
+    });
   }
 
   private setDirty(nextValue: boolean): void {
@@ -223,13 +265,16 @@ export class EditorController {
 
   private renderReviewPanel(focusCommentId?: number): void {
     renderReviewPanel(this.reviewHost, {
-      annotations: this.annotations,
+      annotations: sortAnnotationsForPanel(this.annotations.map((annotation) => this.refreshAnnotationText(annotation))),
       diagnostics: this.diagnostics,
       activeId: this.activeId,
       focusCommentId,
       onSelect: (id) => this.selectAnnotation(id),
+      onGoTo: (id) => this.goToAnnotation(id),
+      onDelete: (id) => this.deleteAnnotation(id),
       onCommentFocus: (id) => this.selectAnnotation(id, false),
       onCommentChange: (id, comment) => this.updateAnnotationComment(id, comment),
+      onUnsafeComment: () => this.onInfo('Последовательность -- в комментарии заменена на - -, чтобы сохранить корректный HTML-comment.'),
     });
   }
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseTaggedMarkdown } from '../src/editor/markdownTags';
 import { buildTaggedFragment, serializeMarkdownWithTags } from '../src/editor/markdownSerializer';
+import { sanitizeCommentForHtmlComment, sortAnnotationsForPanel } from '../src/editor/reviewModel';
 import type { EditAnnotation } from '../src/editor/types';
 
 describe('markdownTags', () => {
@@ -99,8 +100,93 @@ describe('markdownTags', () => {
     expect(markdown).toContain('Обновленный текст');
     expect(markdown).toContain(raw);
   });
+
+  it('сохраняет измененный комментарий несопоставленной правки', () => {
+    const raw = buildTaggedFragment({ id: 5, kind: 'inline', comment: 'Старый комментарий' }, 'исходный');
+    const markdown = serializeMarkdownWithTags('Обновленный текст', [
+      {
+        id: 5,
+        fragmentText: 'исходный',
+        fragmentMarkdown: 'исходный',
+        comment: 'Новый комментарий',
+        kind: 'inline',
+        rawTaggedMarkdown: raw,
+      },
+    ]);
+
+    expect(markdown).toContain('Обновленный текст');
+    expect(markdown).toContain('Новый комментарий');
+    expect(markdown).not.toContain('Старый комментарий');
+  });
+
+  it('изменение комментария сериализуется в Markdown', () => {
+    const markdown = serializeMarkdownWithTags('Русский фрагмент', [
+      annotation(1, 'Русский фрагмент', 'Новый комментарий с кириллицей', 0, 15),
+    ]);
+
+    expect(markdown).toContain('Новый комментарий с кириллицей');
+    expect(markdown).toContain('ed-comm id="1"');
+  });
+
+  it('многострочный комментарий сохраняется внутри ed-comm', () => {
+    const markdown = serializeMarkdownWithTags('Фрагмент', [
+      annotation(1, 'Фрагмент', 'Первая строка\nВторая строка', 0, 8),
+    ]);
+
+    expect(markdown).toContain('Первая строка\r\nВторая строка');
+  });
+
+  it('удаление правки оставляет фрагмент и не меняет id других правок', () => {
+    const annotations = [
+      annotation(1, 'Первый', 'Комментарий 1', 0, 6),
+      annotation(5, 'Пятый', 'Комментарий 5', 9, 14),
+    ];
+
+    const markdown = serializeMarkdownWithTags('Первый и Пятый', annotations);
+
+    expect(markdown).toContain('Первый');
+    expect(markdown).toContain('Пятый');
+    expect(markdown).toContain('id="1"');
+    expect(markdown).toContain('id="5"');
+    expect(markdown).not.toContain('id="2"');
+  });
+
+  it('список правок сортируется по позиции в документе без перенумерации', () => {
+    const sorted = sortAnnotationsForPanel([
+      annotation(5, 'Пятый', 'Комментарий 5', 20, 25),
+      annotation(1, 'Первый', 'Комментарий 1', 0, 6),
+      annotation(2, 'Второй', 'Комментарий 2', 10, 16),
+    ]);
+
+    expect(sorted.map((item) => item.id)).toEqual([1, 2, 5]);
+  });
+
+  it('опасная последовательность в комментарии заменяется безопасно', () => {
+    const sanitized = sanitizeCommentForHtmlComment('Нельзя -->, -- и ---- внутри комментария');
+    const markdown = serializeMarkdownWithTags('Фрагмент', [
+      annotation(1, 'Фрагмент', sanitized.value, 0, 8),
+    ]);
+    const parsed = parseTaggedMarkdown(markdown);
+
+    expect(sanitized.changed).toBe(true);
+    expect(parsed.diagnostics).toEqual([]);
+    expect(parsed.annotations[0].comment).toBe('Нельзя - ->, - - и - - - - внутри комментария');
+    expect(parsed.annotations[0].comment).not.toContain('--');
+  });
 });
 
 function normalize(value: string): string {
   return value.trim().replace(/\n/g, '\r\n');
+}
+
+function annotation(id: number, fragment: string, comment: string, from: number, to: number): EditAnnotation {
+  return {
+    id,
+    from,
+    to,
+    fragmentText: fragment,
+    fragmentMarkdown: fragment,
+    comment,
+    kind: 'inline',
+  };
 }

@@ -271,6 +271,25 @@ public sealed class EditTagParserTests
         Assert.Equal("устало посмотрел", edit.FragmentPlainText);
     }
 
+    [Fact]
+    public void Serializer_RemoveAndUpdateAfterWebEditing_KeepsRemainingIdsAndRussianComment()
+    {
+        var markdown = string.Join(
+            "\r\n",
+            _serializer.BuildEditBlock(1, "Первый фрагмент", "Первый комментарий"),
+            _serializer.BuildEditBlock(2, "Второй фрагмент", "Второй комментарий"),
+            _serializer.BuildEditBlock(5, "Пятый фрагмент", "Пятый комментарий"));
+
+        var removed = _serializer.RemoveEditKeepFragment(markdown, 2);
+        var updated = _serializer.UpdateComment(removed, 5, "Новый комментарий с кириллицей");
+        var document = _parser.Parse(updated);
+
+        Assert.False(document.HasErrors);
+        Assert.Equal(new[] { 1, 5 }, document.Edits.Select(edit => edit.Id));
+        Assert.Contains("Второй фрагмент", document.MarkdownWithoutEditMarkup, StringComparison.Ordinal);
+        Assert.Equal("Новый комментарий с кириллицей", document.Edits.Single(edit => edit.Id == 5).Comment);
+    }
+
     private static string Normalize(string value)
     {
         return value.ReplaceLineEndings("\r\n");
