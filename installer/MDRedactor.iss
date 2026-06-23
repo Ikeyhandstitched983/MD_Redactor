@@ -1,5 +1,5 @@
 #define AppName "MD Redactor"
-#define AppVersion "0.1.0"
+#define AppVersion "0.1.1"
 #define AppExeName "MDRedactor.App.exe"
 #define PublisherName "MD Redactor"
 
