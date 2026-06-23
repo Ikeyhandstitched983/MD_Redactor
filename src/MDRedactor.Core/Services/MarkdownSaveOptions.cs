@@ -9,4 +9,6 @@ public sealed record MarkdownSaveOptions
     public string TemporaryExtension { get; init; } = ".tmp";
 
     public string BackupExtension { get; init; } = ".bak";
+
+    public string? BackupDirectory { get; init; }
 }

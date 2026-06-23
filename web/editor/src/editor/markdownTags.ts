@@ -47,12 +47,22 @@ export function parseTaggedMarkdown(markdown: string): ParsedTaggedMarkdown {
   const usedIds = new Set<number>();
   let current: ActiveEdit | undefined;
   let position = 0;
+  let cleanLength = 0;
+
+  const appendClean = (value: string): void => {
+    if (value.length === 0) {
+      return;
+    }
+
+    cleanParts.push(value);
+    cleanLength += value.length;
+  };
 
   for (const token of readTokens(markdown)) {
-    cleanParts.push(markdown.slice(position, token.start));
+    appendClean(markdown.slice(position, token.start));
 
     if (token.kind === 'unknown') {
-      cleanParts.push(markdown.slice(token.start, token.end));
+      appendClean(markdown.slice(token.start, token.end));
       diagnostics.push(error('edit.unknown_marker', token.start, token.id));
       position = token.end;
       continue;
@@ -82,8 +92,8 @@ export function parseTaggedMarkdown(markdown: string): ParsedTaggedMarkdown {
         rawStart: token.start,
         fragmentRawStart: token.end,
         fragmentRawEnd: token.end,
-        fragmentCleanStart: cleanParts.join('').length,
-        fragmentCleanEnd: cleanParts.join('').length,
+        fragmentCleanStart: cleanLength,
+        fragmentCleanEnd: cleanLength,
         comment: '',
         hasComment: false,
         hasError: idError || duplicateError || current?.hasError === true,
@@ -106,7 +116,7 @@ export function parseTaggedMarkdown(markdown: string): ParsedTaggedMarkdown {
       }
 
       current.fragmentRawEnd = token.start;
-      current.fragmentCleanEnd = cleanParts.join('').length;
+      current.fragmentCleanEnd = cleanLength;
       current.comment = trimSingleTrailingLineBreak(token.comment);
       current.hasComment = true;
 
@@ -156,7 +166,7 @@ export function parseTaggedMarkdown(markdown: string): ParsedTaggedMarkdown {
     position = token.end;
   }
 
-  cleanParts.push(markdown.slice(position));
+  appendClean(markdown.slice(position));
 
   if (current) {
     if (!current.hasComment) {

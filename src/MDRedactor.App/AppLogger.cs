@@ -7,6 +7,11 @@ internal static class AppLogger
 {
     private static readonly object SyncRoot = new();
 
+    public static void LogInfo(string context, string? filePath = null)
+    {
+        Write("INFO", context, filePath, null);
+    }
+
     public static void LogError(Exception exception, string context, string? filePath = null)
     {
         Write("ERROR", context, filePath, exception.ToString());

@@ -24,9 +24,17 @@ Saving uses `MarkdownFileService.SaveAtomicAsync`:
 
 1. The Markdown is encoded with the original file encoding when possible.
 2. A temporary `filename.md.tmp` file is written next to the source file.
-3. A `filename.md.bak` backup is created before the first save in the current WPF session.
+3. A timestamped backup is created before the first save in the current WPF session.
 4. The source file is replaced by the temporary file.
 5. The temporary file is removed after success and `LastWriteTimeUtc` is updated.
+
+Backups are stored outside the document folder:
+
+```text
+%LOCALAPPDATA%\MDRedactor\backups
+```
+
+The backup name is based on the original file name and local timestamp, for example `filename.md.2026-06-23-1205.bak`. If a file with the same backup name already exists, the service appends a numeric suffix and never overwrites the older backup.
 
 If temporary write, backup creation, or replacement fails, the original file is left untouched where possible. The app logs read, save, and WebView2 protocol errors to:
 

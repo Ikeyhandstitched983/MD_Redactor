@@ -3,7 +3,8 @@ import { t } from './i18n';
 export type EditorToHostMessage =
   | { type: 'editor.ready' }
   | { type: 'editor.dirtyChanged'; isDirty: boolean }
-  | { type: 'editor.saveRequested'; markdown: string }
+  | { type: 'editor.saveRequested'; markdown: string; requestId?: number }
+  | { type: 'editor.performance'; step: string; elapsedMs: number; details?: string }
   | { type: 'editor.error'; message: string };
 
 export type HostToEditorMessage =
@@ -14,7 +15,8 @@ export type HostToEditorMessage =
       markdown: string;
       encodingName: string;
     }
-  | { type: 'host.requestMarkdown' }
+  | { type: 'host.requestMarkdown'; requestId?: number }
+  | { type: 'host.markSaved' }
   | { type: 'host.setTheme'; theme: 'light' | 'dark' | string }
   | { type: 'host.setLanguage'; language: 'ru' | 'en' | string };
 
@@ -63,6 +65,7 @@ function isHostMessage(value: unknown): value is HostToEditorMessage {
   const type = String((value as { type: unknown }).type);
   return type === 'host.loadDocument'
     || type === 'host.requestMarkdown'
+    || type === 'host.markSaved'
     || type === 'host.setTheme'
     || type === 'host.setLanguage';
 }

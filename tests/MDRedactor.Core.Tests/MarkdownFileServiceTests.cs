@@ -156,18 +156,26 @@ public sealed class MarkdownFileServiceTests
         var directoryPath = Path.Combine(Path.GetTempPath(), $"md-redactor-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directoryPath);
         var filePath = Path.Combine(directoryPath, "scene.md");
+        var backupDirectory = Path.Combine(directoryPath, "backups");
         var service = new MarkdownFileService();
 
         try
         {
             await File.WriteAllTextAsync(filePath, "Старый русский текст", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             var document = await service.ReadAsync(filePath);
-            var result = await service.SaveAtomicAsync(document with { Markdown = "Новый русский текст с буквой ё" });
+            var result = await service.SaveAtomicAsync(
+                document with { Markdown = "Новый русский текст с буквой ё" },
+                new MarkdownSaveOptions { BackupDirectory = backupDirectory });
 
             Assert.True(result.BackupCreated);
-            Assert.True(File.Exists(filePath + ".bak"));
+            Assert.NotNull(result.BackupFilePath);
+            Assert.True(File.Exists(result.BackupFilePath));
+            Assert.StartsWith(backupDirectory, result.BackupFilePath, StringComparison.OrdinalIgnoreCase);
+            Assert.StartsWith("scene.md.", Path.GetFileName(result.BackupFilePath), StringComparison.Ordinal);
+            Assert.EndsWith(".bak", result.BackupFilePath, StringComparison.Ordinal);
+            Assert.False(File.Exists(filePath + ".bak"));
             Assert.False(File.Exists(filePath + ".tmp"));
-            Assert.Equal("Старый русский текст", await File.ReadAllTextAsync(filePath + ".bak", Encoding.UTF8));
+            Assert.Equal("Старый русский текст", await File.ReadAllTextAsync(result.BackupFilePath, Encoding.UTF8));
             Assert.Equal("Новый русский текст с буквой ё", await File.ReadAllTextAsync(filePath, Encoding.UTF8));
             Assert.Equal(new DateTimeOffset(File.GetLastWriteTimeUtc(filePath), TimeSpan.Zero), result.LastWriteTimeUtc);
         }
@@ -183,6 +191,7 @@ public sealed class MarkdownFileServiceTests
         var directoryPath = Path.Combine(Path.GetTempPath(), $"md-redactor-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directoryPath);
         var filePath = Path.Combine(directoryPath, "legacy.md");
+        var backupDirectory = Path.Combine(directoryPath, "backups");
         var service = new MarkdownFileService();
         var windows1251 = Encoding.GetEncoding(1251);
 
@@ -191,7 +200,9 @@ public sealed class MarkdownFileServiceTests
             await File.WriteAllTextAsync(filePath, "Старый текст", windows1251);
             var document = await service.ReadAsync(filePath);
 
-            await service.SaveAtomicAsync(document with { Markdown = "Новый текст: ёлка и сцена" });
+            await service.SaveAtomicAsync(
+                document with { Markdown = "Новый текст: ёлка и сцена" },
+                new MarkdownSaveOptions { BackupDirectory = backupDirectory });
             var savedBytes = await File.ReadAllBytesAsync(filePath);
             var savedText = windows1251.GetString(savedBytes);
 
@@ -211,13 +222,16 @@ public sealed class MarkdownFileServiceTests
         var directoryPath = Path.Combine(Path.GetTempPath(), $"md-redactor-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directoryPath);
         var filePath = Path.Combine(directoryPath, "backup.md");
+        var backupDirectory = Path.Combine(directoryPath, "backups");
         var service = new MarkdownFileService();
 
         try
         {
             await File.WriteAllTextAsync(filePath, "Исходная версия", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             var document = await service.ReadAsync(filePath);
-            var firstSave = await service.SaveAtomicAsync(document with { Markdown = "Первая сохраненная версия" });
+            var firstSave = await service.SaveAtomicAsync(
+                document with { Markdown = "Первая сохраненная версия" },
+                new MarkdownSaveOptions { BackupDirectory = backupDirectory });
             var afterFirstSave = document with
             {
                 Markdown = "Вторая сохраненная версия",
@@ -225,10 +239,55 @@ public sealed class MarkdownFileServiceTests
                 BackupCreatedInSession = true
             };
 
-            await service.SaveAtomicAsync(afterFirstSave);
+            await service.SaveAtomicAsync(afterFirstSave, new MarkdownSaveOptions { BackupDirectory = backupDirectory });
 
-            Assert.Equal("Исходная версия", await File.ReadAllTextAsync(filePath + ".bak", Encoding.UTF8));
+            Assert.NotNull(firstSave.BackupFilePath);
+            Assert.Equal("Исходная версия", await File.ReadAllTextAsync(firstSave.BackupFilePath, Encoding.UTF8));
+            Assert.Single(Directory.GetFiles(backupDirectory, "*.bak"));
+            Assert.False(File.Exists(filePath + ".bak"));
             Assert.Equal("Вторая сохраненная версия", await File.ReadAllTextAsync(filePath, Encoding.UTF8));
+        }
+        finally
+        {
+            Directory.Delete(directoryPath, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SaveAtomicAsync_TimestampBackupsDoNotOverwritePreviousCopies()
+    {
+        var directoryPath = Path.Combine(Path.GetTempPath(), $"md-redactor-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directoryPath);
+        var filePath = Path.Combine(directoryPath, "chapter.md");
+        var backupDirectory = Path.Combine(directoryPath, "backups");
+        var service = new MarkdownFileService();
+        var options = new MarkdownSaveOptions
+        {
+            BackupDirectory = backupDirectory,
+            BackupOnlyOncePerSession = false
+        };
+
+        try
+        {
+            await File.WriteAllTextAsync(filePath, "Исходная версия", new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            var document = await service.ReadAsync(filePath);
+
+            var firstSave = await service.SaveAtomicAsync(document with { Markdown = "Первая версия" }, options);
+            var secondDocument = document with
+            {
+                Markdown = "Вторая версия",
+                LastWriteTimeUtc = firstSave.LastWriteTimeUtc,
+                BackupCreatedInSession = false
+            };
+            var secondSave = await service.SaveAtomicAsync(secondDocument, options);
+
+            Assert.NotNull(firstSave.BackupFilePath);
+            Assert.NotNull(secondSave.BackupFilePath);
+            Assert.NotEqual(firstSave.BackupFilePath, secondSave.BackupFilePath);
+            Assert.Equal(2, Directory.GetFiles(backupDirectory, "*.bak").Length);
+            Assert.Equal("Исходная версия", await File.ReadAllTextAsync(firstSave.BackupFilePath, Encoding.UTF8));
+            Assert.Equal("Первая версия", await File.ReadAllTextAsync(secondSave.BackupFilePath, Encoding.UTF8));
+            Assert.False(File.Exists(filePath + ".bak"));
         }
         finally
         {
@@ -242,6 +301,7 @@ public sealed class MarkdownFileServiceTests
         var directoryPath = Path.Combine(Path.GetTempPath(), $"md-redactor-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directoryPath);
         var filePath = Path.Combine(directoryPath, "edits.md");
+        var backupDirectory = Path.Combine(directoryPath, "backups");
         var service = new MarkdownFileService();
         var serializer = new EditTagSerializer();
         var validator = new EditTagValidator();
@@ -264,7 +324,9 @@ public sealed class MarkdownFileServiceTests
 
             Assert.Empty(errors);
 
-            await service.SaveAtomicAsync(document with { Markdown = afterRemoval });
+            await service.SaveAtomicAsync(
+                document with { Markdown = afterRemoval },
+                new MarkdownSaveOptions { BackupDirectory = backupDirectory });
             var saved = await service.ReadAsync(filePath);
             var parsed = parser.Parse(saved.Markdown);
 
@@ -284,6 +346,7 @@ public sealed class MarkdownFileServiceTests
         var directoryPath = Path.Combine(Path.GetTempPath(), $"md-redactor-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directoryPath);
         var filePath = Path.Combine(directoryPath, "broken.md");
+        var backupDirectory = Path.Combine(directoryPath, "backups");
         var service = new MarkdownFileService();
         var validator = new EditTagValidator();
         var original = "Исходный русский текст";
@@ -303,12 +366,15 @@ public sealed class MarkdownFileServiceTests
 
             if (errors.Count == 0)
             {
-                await service.SaveAtomicAsync(document with { Markdown = malformed });
+                await service.SaveAtomicAsync(
+                    document with { Markdown = malformed },
+                    new MarkdownSaveOptions { BackupDirectory = backupDirectory });
             }
 
             Assert.NotEmpty(errors);
             Assert.Equal(original, await File.ReadAllTextAsync(filePath, Encoding.UTF8));
             Assert.False(File.Exists(filePath + ".bak"));
+            Assert.False(Directory.Exists(backupDirectory));
             Assert.False(File.Exists(filePath + ".tmp"));
         }
         finally

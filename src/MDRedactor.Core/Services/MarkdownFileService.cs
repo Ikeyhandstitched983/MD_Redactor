@@ -67,7 +67,7 @@ public sealed class MarkdownFileService : IMarkdownFileService
         Directory.CreateDirectory(directory);
 
         var tempPath = filePath + options.TemporaryExtension;
-        var backupPath = filePath + options.BackupExtension;
+        var backupPath = ResolveBackupPath(filePath, options);
         var encoding = ResolveEncoding(document.EncodingName, document.HasBom);
         var backupCreated = false;
 
@@ -81,7 +81,13 @@ public sealed class MarkdownFileService : IMarkdownFileService
 
             if (shouldCreateBackup)
             {
-                File.Copy(filePath, backupPath, overwrite: true);
+                var backupDirectory = Path.GetDirectoryName(backupPath);
+                if (!string.IsNullOrWhiteSpace(backupDirectory))
+                {
+                    Directory.CreateDirectory(backupDirectory);
+                }
+
+                File.Copy(filePath, backupPath, overwrite: false);
                 backupCreated = true;
             }
 
@@ -167,6 +173,31 @@ public sealed class MarkdownFileService : IMarkdownFileService
             Windows1251EncodingName => Encoding.GetEncoding(1251),
             _ => Utf8WithoutBom
         };
+    }
+
+    private static string ResolveBackupPath(string filePath, MarkdownSaveOptions options)
+    {
+        var backupDirectory = string.IsNullOrWhiteSpace(options.BackupDirectory)
+            ? GetDefaultBackupDirectory()
+            : Path.GetFullPath(options.BackupDirectory);
+        var fileName = Path.GetFileName(filePath);
+        var timestamp = DateTimeOffset.Now.ToLocalTime().ToString("yyyy-MM-dd-HHmm", System.Globalization.CultureInfo.InvariantCulture);
+        var candidateName = $"{fileName}.{timestamp}{options.BackupExtension}";
+        var candidatePath = Path.Combine(backupDirectory, candidateName);
+
+        for (var index = 2; File.Exists(candidatePath); index++)
+        {
+            candidateName = $"{fileName}.{timestamp}-{index}{options.BackupExtension}";
+            candidatePath = Path.Combine(backupDirectory, candidateName);
+        }
+
+        return candidatePath;
+    }
+
+    private static string GetDefaultBackupDirectory()
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        return Path.Combine(localAppData, "MDRedactor", "backups");
     }
 
     private static void TryDeleteTempFile(string tempPath)

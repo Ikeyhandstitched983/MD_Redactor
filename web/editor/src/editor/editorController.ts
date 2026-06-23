@@ -24,6 +24,7 @@ export type EditorControllerOptions = {
   onDirtyChanged(isDirty: boolean): void;
   onError(message: string): void;
   onInfo(message: string): void;
+  onPerformance(step: string, elapsedMs: number, details?: string): void;
 };
 
 export class EditorController {
@@ -32,6 +33,7 @@ export class EditorController {
   private readonly onDirtyChanged: (isDirty: boolean) => void;
   private readonly onError: (message: string) => void;
   private readonly onInfo: (message: string) => void;
+  private readonly onPerformance: (step: string, elapsedMs: number, details?: string) => void;
   private view?: EditorView;
   private annotations: EditAnnotation[] = [];
   private diagnostics: EditDiagnostic[] = [];
@@ -45,19 +47,31 @@ export class EditorController {
     this.onDirtyChanged = options.onDirtyChanged;
     this.onError = options.onError;
     this.onInfo = options.onInfo;
+    this.onPerformance = options.onPerformance;
     this.renderReviewPanel();
   }
 
   public loadDocument(document: LoadedDocument): void {
-    const parsed = parseTaggedMarkdown(document.markdown ?? '');
+    const totalStartedAt = performance.now();
+    const markdown = document.markdown ?? '';
+    const parseTagsStartedAt = performance.now();
+    const parsed = parseTaggedMarkdown(markdown);
+    this.reportPerformance('parseTaggedMarkdown', parseTagsStartedAt, `${markdown.length} chars`);
 
     try {
+      const parseMarkdownStartedAt = performance.now();
       const doc = parseMarkdownToDoc(parsed.cleanMarkdown);
+      this.reportPerformance('parseMarkdownToDoc', parseMarkdownStartedAt, `${parsed.cleanMarkdown.length} chars`);
+
+      const mapStartedAt = performance.now();
       const mapped = mapAnnotationsToDocument(parsed.annotations, doc);
+      this.reportPerformance('mapAnnotationsToDocument', mapStartedAt, `${parsed.annotations.length} edits`);
+
       this.annotations = mapped.annotations;
       this.diagnostics = [...parsed.diagnostics, ...mapped.diagnostics];
       this.activeId = undefined;
 
+      const stateStartedAt = performance.now();
       const state = EditorState.create({
         doc,
         plugins: createEditorPlugins({
@@ -82,6 +96,7 @@ export class EditorController {
           },
         }),
       });
+      this.reportPerformance('editorState.create', stateStartedAt);
 
       if (this.view) {
         this.view.updateState(state);
@@ -103,6 +118,8 @@ export class EditorController {
       if (firstError) {
         this.onError(firstError.message);
       }
+
+      this.reportPerformance('editorController.loadDocument', totalStartedAt);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.onError(t('editor.renderError', { message }));
@@ -118,9 +135,21 @@ export class EditorController {
       return '';
     }
 
+    const totalStartedAt = performance.now();
+    const documentSerializeStartedAt = performance.now();
     const cleanMarkdown = serializeDocumentToMarkdown(this.view.state.doc);
+    this.reportPerformance('serializeDocumentToMarkdown', documentSerializeStartedAt, `${cleanMarkdown.length} chars`);
+
+    const tagsSerializeStartedAt = performance.now();
     const annotations = this.annotations.map((annotation) => this.refreshAnnotationText(annotation));
-    return serializeMarkdownWithTags(cleanMarkdown, annotations);
+    const markdown = serializeMarkdownWithTags(cleanMarkdown, annotations);
+    this.reportPerformance('serializeMarkdownWithTags', tagsSerializeStartedAt, `${annotations.length} edits`);
+    this.reportPerformance('getMarkdownWithTags.total', totalStartedAt, `${markdown.length} chars`);
+    return markdown;
+  }
+
+  public markSaved(): void {
+    this.setDirty(false);
   }
 
   public setTheme(theme: string): void {
@@ -293,6 +322,10 @@ export class EditorController {
 
     this.isDirty = nextValue;
     this.onDirtyChanged(nextValue);
+  }
+
+  private reportPerformance(step: string, startedAt: number, details?: string): void {
+    this.onPerformance(step, performance.now() - startedAt, details);
   }
 
   private renderReviewPanel(focusCommentId?: number): void {

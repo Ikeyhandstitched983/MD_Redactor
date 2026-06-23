@@ -273,6 +273,32 @@
 
         <Grid Grid.Row="1">
             <wv2:WebView2 x:Name="EditorWebView" />
+            <Border x:Name="LoadingPanel"
+                    Background="{DynamicResource WindowBackgroundBrush}"
+                    Panel.ZIndex="2">
+                <Border Background="{DynamicResource SurfaceBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="24"
+                        MaxWidth="520"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                    <StackPanel>
+                        <TextBlock x:Name="LoadingTitleText"
+                                   Text="Loading editor..."
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PrimaryTextBrush}" />
+                        <TextBlock x:Name="LoadingHintText"
+                                   Text="The first launch can take a few seconds."
+                                   Margin="0,8,0,0"
+                                   FontSize="13"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource MutedTextBrush}" />
+                    </StackPanel>
+                </Border>
+            </Border>
             <Border x:Name="StartupErrorPanel"
                     Visibility="Collapsed"
                     Background="{DynamicResource WarningSurfaceBrush}"

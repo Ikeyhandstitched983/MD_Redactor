@@ -79,7 +79,8 @@ dotnet publish $appProjectPath `
     --runtime $Runtime `
     --self-contained true `
     --output $publishPath `
-    -p:PublishSingleFile=false
+    -p:PublishSingleFile=false `
+    -p:PublishReadyToRun=true
 Assert-NativeSuccess -Step "dotnet publish"
 
 if (-not (Test-Path -LiteralPath (Join-Path $webDistPath "index.html"))) {

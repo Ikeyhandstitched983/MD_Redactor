@@ -42,7 +42,7 @@ Dark theme:
 - Open `.md` files from the app, with `Ctrl+O`, drag-and-drop, or Windows "Open with...".
 - Create an edit by selecting text and pressing `Enter`.
 - Right review panel with edit cards, comments, navigation, and deletion.
-- Safe save pipeline: edit tag validation, atomic write, and a `.bak` backup before the first save in a session.
+- Safe save pipeline: edit tag validation, atomic write, and timestamped backups in `%LOCALAPPDATA%\MDRedactor\backups`.
 - UTF-8, UTF-8 BOM, UTF-16 LE/BE BOM, and Windows-1251 fallback.
 
 ## Install the app
@@ -106,9 +106,17 @@ Before writing a file, MD Redactor validates edit tags. It blocks saving when it
 Saving is atomic:
 
 1. A temporary file is written next to the Markdown file.
-2. A backup `filename.md.bak` is created before the first save in the current session.
+2. Before the first save in the current session, a timestamped backup is created in `%LOCALAPPDATA%\MDRedactor\backups`.
 3. The original file is replaced by the temporary file.
 4. If an error happens, the original file is left untouched.
+
+Backup names use the original file name and a timestamp, for example:
+
+```text
+filename.md.2026-06-23-1205.bak
+```
+
+If a backup with the same name already exists, MD Redactor adds a numeric suffix instead of overwriting it.
 
 If the file was changed by another program after opening, MD Redactor asks before overwriting it.
 

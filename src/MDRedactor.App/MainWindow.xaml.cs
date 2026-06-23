@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security;
@@ -23,8 +24,11 @@ public partial class MainWindow : Window
     private readonly IMarkdownFileService _fileService = new MarkdownFileService();
     private readonly EditTagValidator _validator = new();
     private readonly MainWindowViewModel _viewModel;
+    private readonly Stopwatch _startupStopwatch = Stopwatch.StartNew();
     private MarkdownDocument? _currentDocument;
     private TaskCompletionSource<string?>? _pendingMarkdownRequest;
+    private int _markdownRequestSequence;
+    private int? _pendingMarkdownRequestId;
     private AppThemePreference _themePreference;
     private AppLanguagePreference _languagePreference;
     private string _effectiveTheme = "light";
@@ -34,6 +38,7 @@ public partial class MainWindow : Window
     private bool _editorReady;
     private bool _isSaving;
     private bool _allowClose;
+    private bool _isCloseConfirmationInProgress;
     private string? _pendingStartupFilePath;
     private bool _isOpeningStartupFile;
     private string _statusKey = AppText.StatusNoFile;
@@ -41,6 +46,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        LogPerformance("wpf.constructor.ready");
 
         _pendingStartupFilePath = GetStartupFilePathFromArguments();
         var initialSettings = AppSettingsStore.Load();
@@ -60,37 +66,74 @@ public partial class MainWindow : Window
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        LogPerformance("wpf.loaded");
         await InitializeEditorAsync();
     }
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        LogPerformance("wpf.closed");
+        _pendingMarkdownRequest?.TrySetResult(null);
+        _pendingMarkdownRequest = null;
+        _pendingMarkdownRequestId = null;
+
         if (EditorWebView.CoreWebView2 is not null)
         {
             EditorWebView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
             EditorWebView.CoreWebView2.NavigationCompleted -= OnEditorNavigationCompleted;
         }
+
+        if (EditorWebView is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
     }
 
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
+        LogPerformance($"wpf.closing dirty={_viewModel.HasUnsavedChanges} saving={_isSaving}");
+
         if (_allowClose || !_viewModel.HasUnsavedChanges)
         {
             return;
         }
 
-        e.Cancel = true;
-
-        if (await ConfirmUnsavedChangesAsync())
+        if (_isSaving)
         {
-            _allowClose = true;
-            Close();
+            e.Cancel = true;
+            ShowMessage(T(AppText.StatusSaving), T("CloseDuringSaveMessage"));
+            return;
+        }
+
+        if (_isCloseConfirmationInProgress)
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        e.Cancel = true;
+        _isCloseConfirmationInProgress = true;
+
+        try
+        {
+            if (await ConfirmUnsavedChangesAsync(TimeSpan.FromSeconds(4)))
+            {
+                _allowClose = true;
+                Close();
+            }
+        }
+        finally
+        {
+            _isCloseConfirmationInProgress = false;
         }
     }
 
     private async Task InitializeEditorAsync()
     {
+        LogPerformance("editor.initialize.start");
+        var findIndexStopwatch = Stopwatch.StartNew();
         var indexPath = FindEditorIndexPath();
+        LogPerformance("editor.index.checked", $"{findIndexStopwatch.ElapsedMilliseconds} ms");
         if (indexPath is null)
         {
             ShowStartupError(T("WebEditorMissing", GetExpectedEditorIndexPath()));
@@ -103,9 +146,15 @@ public partial class MainWindow : Window
                 ?? throw new InvalidOperationException(T("EditorFolderError"));
             var webViewUserDataFolder = GetWebView2UserDataFolder();
             Directory.CreateDirectory(webViewUserDataFolder);
-            var webViewEnvironment = await CoreWebView2Environment.CreateAsync(userDataFolder: webViewUserDataFolder);
 
+            var environmentStopwatch = Stopwatch.StartNew();
+            var webViewEnvironment = await CoreWebView2Environment.CreateAsync(userDataFolder: webViewUserDataFolder);
+            LogPerformance("editor.webview.environment.created", $"{environmentStopwatch.ElapsedMilliseconds} ms");
+
+            var webViewStopwatch = Stopwatch.StartNew();
             await EditorWebView.EnsureCoreWebView2Async(webViewEnvironment);
+            LogPerformance("editor.webview.ready", $"{webViewStopwatch.ElapsedMilliseconds} ms");
+
             EditorWebView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
             EditorWebView.CoreWebView2.NavigationCompleted += OnEditorNavigationCompleted;
             EditorWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
@@ -113,6 +162,7 @@ public partial class MainWindow : Window
                 editorDistFolder,
                 CoreWebView2HostResourceAccessKind.Allow);
             EditorWebView.Source = new Uri($"https://{EditorVirtualHostName}/index.html");
+            LogPerformance("editor.navigation.started");
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or COMException or WebView2RuntimeNotFoundException)
         {
@@ -123,6 +173,8 @@ public partial class MainWindow : Window
 
     private void OnEditorNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
+        LogPerformance($"editor.navigation.completed success={e.IsSuccess} status={e.WebErrorStatus}");
+
         if (e.IsSuccess)
         {
             return;
@@ -158,9 +210,14 @@ public partial class MainWindow : Window
 
     private async Task OpenDocumentAsync(string filePath)
     {
+        var openStopwatch = Stopwatch.StartNew();
+        LogPerformance("document.open.start");
+
         try
         {
             var document = await _fileService.ReadAsync(filePath);
+            LogPerformance("document.open.read", $"{openStopwatch.ElapsedMilliseconds} ms");
+
             _currentDocument = document;
             _viewModel.CurrentFileTitle = document.FileName;
             _viewModel.HasUnsavedChanges = false;
@@ -174,6 +231,7 @@ public partial class MainWindow : Window
             }
 
             SendDocumentToEditor(document);
+            LogPerformance("document.open.sent_to_editor", $"{openStopwatch.ElapsedMilliseconds} ms");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DecoderFallbackException)
         {
@@ -219,7 +277,7 @@ public partial class MainWindow : Window
         await SaveCurrentFileAsync();
     }
 
-    private async Task<bool> SaveCurrentFileAsync()
+    private async Task<bool> SaveCurrentFileAsync(TimeSpan? editorResponseTimeout = null)
     {
         if (_currentDocument is null)
         {
@@ -227,7 +285,7 @@ public partial class MainWindow : Window
             return false;
         }
 
-        var markdown = await RequestMarkdownFromEditorAsync();
+        var markdown = await RequestMarkdownFromEditorAsync(editorResponseTimeout);
         if (markdown is null)
         {
             SetStatus(AppText.StatusSaveError);
@@ -273,6 +331,7 @@ public partial class MainWindow : Window
 
         try
         {
+            var saveStopwatch = Stopwatch.StartNew();
             _isSaving = true;
             SetStatus(AppText.StatusSaving);
 
@@ -285,7 +344,8 @@ public partial class MainWindow : Window
             };
             _viewModel.HasUnsavedChanges = false;
             SetStatus(AppText.StatusSaved);
-            SendDocumentToEditor(_currentDocument);
+            PostToEditor(new { type = "host.markSaved" });
+            LogPerformance("document.save.done", $"{saveStopwatch.ElapsedMilliseconds} ms");
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -301,30 +361,40 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task<string?> RequestMarkdownFromEditorAsync()
+    private async Task<string?> RequestMarkdownFromEditorAsync(TimeSpan? timeout = null)
     {
         if (!_editorReady || EditorWebView.CoreWebView2 is null)
         {
             return null;
         }
 
+        var effectiveTimeout = timeout ?? TimeSpan.FromSeconds(15);
+        var requestStopwatch = Stopwatch.StartNew();
+        var requestId = ++_markdownRequestSequence;
         var request = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pendingMarkdownRequest = request;
+        _pendingMarkdownRequestId = requestId;
 
         try
         {
-            PostToEditor(new { type = "host.requestMarkdown" });
+            PostToEditor(new { type = "host.requestMarkdown", requestId });
 
-            var completed = await Task.WhenAny(request.Task, Task.Delay(TimeSpan.FromSeconds(15)));
-            return completed == request.Task
-                ? await request.Task
-                : null;
+            var completed = await Task.WhenAny(request.Task, Task.Delay(effectiveTimeout));
+            if (completed == request.Task)
+            {
+                LogPerformance("editor.markdown.request.completed", $"{requestStopwatch.ElapsedMilliseconds} ms");
+                return await request.Task;
+            }
+
+            AppLogger.LogWarning($"Editor Markdown request timed out after {effectiveTimeout.TotalSeconds:0.#} seconds.", _currentDocument?.FilePath);
+            return null;
         }
         finally
         {
             if (ReferenceEquals(_pendingMarkdownRequest, request))
             {
                 _pendingMarkdownRequest = null;
+                _pendingMarkdownRequestId = null;
             }
         }
     }
@@ -345,6 +415,8 @@ public partial class MainWindow : Window
             {
                 case "editor.ready":
                     _editorReady = true;
+                    LoadingPanel.Visibility = Visibility.Collapsed;
+                    LogPerformance("editor.ready");
                     SendThemeToEditor();
                     SendLanguageToEditor();
                     if (_pendingStartupFilePath is not null)
@@ -356,6 +428,21 @@ public partial class MainWindow : Window
                         SendDocumentToEditor(_currentDocument);
                     }
 
+                    break;
+
+                case "editor.performance":
+                    var step = root.TryGetProperty("step", out var stepElement)
+                        ? stepElement.GetString() ?? "unknown"
+                        : "unknown";
+                    var elapsedMs = root.TryGetProperty("elapsedMs", out var elapsedElement)
+                        && elapsedElement.TryGetDouble(out var elapsed)
+                            ? elapsed
+                            : 0;
+                    var details = root.TryGetProperty("details", out var detailsElement)
+                        ? detailsElement.GetString()
+                        : null;
+                    var detailsSuffix = string.IsNullOrWhiteSpace(details) ? string.Empty : $" | {details}";
+                    AppLogger.LogInfo($"Performance web.{step}: {elapsedMs:0.0} ms{detailsSuffix}", _currentDocument?.FilePath);
                     break;
 
                 case "editor.dirtyChanged":
@@ -371,10 +458,24 @@ public partial class MainWindow : Window
                     var markdown = root.TryGetProperty("markdown", out var markdownElement)
                         ? markdownElement.GetString() ?? string.Empty
                         : string.Empty;
+                    var requestId = 0;
+                    var hasRequestId = root.TryGetProperty("requestId", out var requestIdElement)
+                        && requestIdElement.TryGetInt32(out requestId);
 
                     if (_pendingMarkdownRequest is not null)
                     {
-                        _pendingMarkdownRequest.TrySetResult(markdown);
+                        if (!hasRequestId || _pendingMarkdownRequestId.GetValueOrDefault() == requestId)
+                        {
+                            _pendingMarkdownRequest.TrySetResult(markdown);
+                        }
+                        else
+                        {
+                            AppLogger.LogWarning($"Stale editor Markdown response ignored. RequestId: {requestId}.", _currentDocument?.FilePath);
+                        }
+                    }
+                    else if (hasRequestId)
+                    {
+                        AppLogger.LogWarning($"Late editor Markdown response ignored. RequestId: {requestId}.", _currentDocument?.FilePath);
                     }
                     else
                     {
@@ -604,6 +705,8 @@ public partial class MainWindow : Window
         OpenButton.ToolTip = T("OpenTooltip");
         SaveButton.Content = T("SaveButton");
         SaveButton.ToolTip = T("SaveTooltip");
+        LoadingTitleText.Text = T("LoadingEditor");
+        LoadingHintText.Text = T("LoadingEditorHint");
 
         if (_currentDocument is null)
         {
@@ -644,6 +747,12 @@ public partial class MainWindow : Window
     private void RefreshStatus()
     {
         _viewModel.StatusText = T(_statusKey);
+    }
+
+    private void LogPerformance(string step, string? details = null)
+    {
+        var suffix = string.IsNullOrWhiteSpace(details) ? string.Empty : $" | {details}";
+        AppLogger.LogInfo($"Performance {step}: {_startupStopwatch.ElapsedMilliseconds} ms{suffix}", _currentDocument?.FilePath);
     }
 
     private static bool IsSystemDarkTheme()
@@ -694,7 +803,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task<bool> ConfirmUnsavedChangesAsync()
+    private async Task<bool> ConfirmUnsavedChangesAsync(TimeSpan? editorResponseTimeout = null)
     {
         if (!_viewModel.HasUnsavedChanges)
         {
@@ -703,7 +812,7 @@ public partial class MainWindow : Window
 
         return ShowUnsavedChangesDialog() switch
         {
-            UnsavedChangesChoice.Save => await SaveCurrentFileAsync(),
+            UnsavedChangesChoice.Save => await SaveCurrentFileAsync(editorResponseTimeout),
             UnsavedChangesChoice.Discard => true,
             _ => false
         };
@@ -891,6 +1000,7 @@ public partial class MainWindow : Window
 
     private void ShowStartupError(string message)
     {
+        LoadingPanel.Visibility = Visibility.Collapsed;
         StartupErrorText.Text = message;
         StartupErrorPanel.Visibility = Visibility.Visible;
         EditorWebView.Visibility = Visibility.Collapsed;

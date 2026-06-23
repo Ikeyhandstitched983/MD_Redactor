@@ -7,6 +7,7 @@ import { setLanguage, t } from './i18n';
 import { showNotification } from './ui/notifications';
 import { applyTheme } from './ui/theme';
 
+const appStartedAt = performance.now();
 const appElement = document.querySelector<HTMLDivElement>('#app');
 
 if (!appElement) {
@@ -63,7 +64,12 @@ const controller = new EditorController({
     postEditorMessage({ type: 'editor.error', message });
   },
   onInfo: (message) => showNotification(notification, message, 'info'),
+  onPerformance: (step, elapsedMs, details) => reportPerformance(step, elapsedMs, details),
 });
+
+function reportPerformance(step: string, elapsedMs: number, details?: string): void {
+  postEditorMessage({ type: 'editor.performance', step, elapsedMs, details });
+}
 
 function updateDocumentInfo(): void {
   documentTitle.textContent = currentFileName;
@@ -80,8 +86,11 @@ function updateStaticLabels(): void {
   updateDocumentInfo();
 }
 
-function requestSave(): void {
-  postEditorMessage({ type: 'editor.saveRequested', markdown: controller.getMarkdownWithTags() });
+function requestSave(requestId?: number): void {
+  const startedAt = performance.now();
+  const markdown = controller.getMarkdownWithTags();
+  reportPerformance('requestSave.total', performance.now() - startedAt, `${markdown.length} chars`);
+  postEditorMessage({ type: 'editor.saveRequested', markdown, requestId });
 }
 
 function installDocumentWheelScroll(): void {
@@ -114,6 +123,7 @@ function installDocumentWheelScroll(): void {
 }
 
 function loadDocument(message: Extract<HostToEditorMessage, { type: 'host.loadDocument' }>): void {
+  const startedAt = performance.now();
   currentFileName = message.fileName || t('app.untitled');
   currentEncodingName = message.encodingName || 'utf-8';
   hasLoadedDocument = true;
@@ -122,6 +132,7 @@ function loadDocument(message: Extract<HostToEditorMessage, { type: 'host.loadDo
   controller.loadDocument(message satisfies LoadedDocument);
   documentScroll.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   controller.focus();
+  reportPerformance('loadDocument.total', performance.now() - startedAt, `${message.markdown.length} chars`);
 }
 
 window.addEventListener('keydown', (event) => {
@@ -138,7 +149,10 @@ onHostMessage((message) => {
         loadDocument(message);
         break;
       case 'host.requestMarkdown':
-        requestSave();
+        requestSave(message.requestId);
+        break;
+      case 'host.markSaved':
+        controller.markSaved();
         break;
       case 'host.setTheme':
         applyTheme(message.theme || 'light');
@@ -159,4 +173,5 @@ onHostMessage((message) => {
 
 updateDocumentInfo();
 installDocumentWheelScroll();
+reportPerformance('web.ready', performance.now() - appStartedAt);
 postEditorMessage({ type: 'editor.ready' });

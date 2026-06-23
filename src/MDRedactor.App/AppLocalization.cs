@@ -56,6 +56,8 @@ internal static class AppLocalizer
             ["OpenDialogTitle"] = ("Открыть Markdown", "Open Markdown"),
             ["OpenDialogFilter"] = ("Markdown (*.md)|*.md|Все файлы (*.*)|*.*", "Markdown (*.md)|*.md|All files (*.*)|*.*"),
             ["UntitledFile"] = ("Без имени", "Untitled"),
+            ["LoadingEditor"] = ("Загрузка редактора...", "Loading editor..."),
+            ["LoadingEditorHint"] = ("Первый запуск может занять несколько секунд.", "The first launch can take a few seconds."),
 
             ["WebEditorMissing"] = ("Web-редактор не собран. Ожидается файл:\n{0}\n\nЗапустите scripts\\build.ps1 и откройте приложение снова.", "The web editor has not been built. Expected file:\n{0}\n\nRun scripts\\build.ps1 and open the app again."),
             ["EditorFolderError"] = ("Не удалось определить каталог web-редактора.", "Could not resolve the web editor folder."),
@@ -73,6 +75,7 @@ internal static class AppLocalizer
 
             ["UnsavedChangesTitle"] = ("Несохраненные изменения", "Unsaved changes"),
             ["UnsavedChangesMessage"] = ("Есть несохраненные изменения. Сохранить перед закрытием?", "There are unsaved changes. Save before closing?"),
+            ["CloseDuringSaveMessage"] = ("Дождитесь завершения сохранения, затем закройте окно.", "Wait until saving finishes, then close the window."),
             ["SaveChoice"] = ("Сохранить", "Save"),
             ["DiscardChoice"] = ("Не сохранять", "Don't save"),
             ["CancelChoice"] = ("Отмена", "Cancel"),
