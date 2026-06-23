@@ -22,14 +22,12 @@ Dark theme:
 - Comments stay next to the text they describe.
 - The editor hides service tags while you work, so Markdown looks like a document, not raw source.
 - Existing edit ids are never renumbered. Links between comments and fragments stay stable.
-- Russian text and legacy Windows-1251 Markdown files are handled safely.
 
 ## Main features
 
 - Native Windows 10+ desktop app built with WPF, .NET 10, and WebView2.
 - WYSIWYG Markdown editing powered by TypeScript, Vite, and ProseMirror.
 - Light, dark, and system themes.
-- Russian and English interface languages, with system language by default.
 - Open `.md` files from the app, with `Ctrl+O`, drag-and-drop, or Windows "Open with...".
 - Create an edit by selecting text and pressing `Enter`.
 - Right review panel with edit cards, comments, navigation, and deletion.
