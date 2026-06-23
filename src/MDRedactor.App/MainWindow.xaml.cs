@@ -18,6 +18,8 @@ namespace MDRedactor.App;
 
 public partial class MainWindow : Window
 {
+    private const string EditorVirtualHostName = "editor.mdredactor.local";
+
     private readonly IMarkdownFileService _fileService = new MarkdownFileService();
     private readonly EditTagValidator _validator = new();
     private readonly MainWindowViewModel _viewModel;
@@ -58,6 +60,7 @@ public partial class MainWindow : Window
         if (EditorWebView.CoreWebView2 is not null)
         {
             EditorWebView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
+            EditorWebView.CoreWebView2.NavigationCompleted -= OnEditorNavigationCompleted;
         }
     }
 
@@ -91,19 +94,38 @@ public partial class MainWindow : Window
 
         try
         {
+            var editorDistFolder = Path.GetDirectoryName(indexPath)
+                ?? throw new InvalidOperationException("Не удалось определить каталог web-редактора.");
             var webViewUserDataFolder = GetWebView2UserDataFolder();
             Directory.CreateDirectory(webViewUserDataFolder);
             var webViewEnvironment = await CoreWebView2Environment.CreateAsync(userDataFolder: webViewUserDataFolder);
 
             await EditorWebView.EnsureCoreWebView2Async(webViewEnvironment);
             EditorWebView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
-            EditorWebView.Source = new Uri(indexPath);
+            EditorWebView.CoreWebView2.NavigationCompleted += OnEditorNavigationCompleted;
+            EditorWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                EditorVirtualHostName,
+                editorDistFolder,
+                CoreWebView2HostResourceAccessKind.Allow);
+            EditorWebView.Source = new Uri($"https://{EditorVirtualHostName}/index.html");
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or COMException or WebView2RuntimeNotFoundException)
         {
             AppLogger.LogError(ex, "Ошибка запуска WebView2");
             ShowStartupError($"Не удалось запустить WebView2. Установите WebView2 Runtime и повторите запуск.\n\n{ex.Message}");
         }
+    }
+
+    private void OnEditorNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+    {
+        if (e.IsSuccess)
+        {
+            return;
+        }
+
+        var message = $"Не удалось загрузить web-редактор. Статус WebView2: {e.WebErrorStatus}.";
+        AppLogger.LogWarning(message);
+        ShowStartupError(message);
     }
 
     private async Task OpenFileAsync()
@@ -420,16 +442,16 @@ public partial class MainWindow : Window
 
         if (dark)
         {
-            SetBrush("WindowBackgroundBrush", "#151A17");
-            SetBrush("SurfaceBrush", "#202822");
-            SetBrush("SurfaceMutedBrush", "#18201B");
-            SetBrush("BorderBrush", "#3B463F");
-            SetBrush("PrimaryTextBrush", "#EDF4EF");
-            SetBrush("MutedTextBrush", "#A8B6AD");
-            SetBrush("AccentBrush", "#91CFB7");
-            SetBrush("AccentSoftBrush", "#263D34");
-            SetBrush("WarningSurfaceBrush", "#3C2516");
-            SetBrush("WarningBorderBrush", "#B46A2A");
+            SetBrush("WindowBackgroundBrush", "#101412");
+            SetBrush("SurfaceBrush", "#18211C");
+            SetBrush("SurfaceMutedBrush", "#202A24");
+            SetBrush("BorderBrush", "#34433A");
+            SetBrush("PrimaryTextBrush", "#F4F7F5");
+            SetBrush("MutedTextBrush", "#AAB8B0");
+            SetBrush("AccentBrush", "#8DD9BF");
+            SetBrush("AccentSoftBrush", "#223A31");
+            SetBrush("WarningSurfaceBrush", "#3A2718");
+            SetBrush("WarningBorderBrush", "#B87939");
             SetBrush("WarningTextBrush", "#FDBA74");
         }
         else
