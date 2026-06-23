@@ -41,6 +41,53 @@ describe('markdownTags', () => {
     expect(parsed.annotations.map((annotation) => annotation.id)).toEqual([1, 2, 5]);
   });
 
+  it('игнорирует примеры тегов внутри fenced code block', () => {
+    const markdown = normalize(`
+# Документация
+
+\`\`\`markdown
+<!-- ed-start id="1" -->
+fragment
+<!-- ed-comm id="1"
+comment
+-->
+<!-- ed-end id="1" -->
+\`\`\`
+
+После примера.
+`);
+
+    const parsed = parseTaggedMarkdown(markdown);
+
+    expect(parsed.diagnostics).toEqual([]);
+    expect(parsed.annotations).toEqual([]);
+    expect(parsed.cleanMarkdown).toBe(markdown);
+  });
+
+  it('продолжает читать реальную правку после fenced code block', () => {
+    const markdown = normalize(`
+\`\`\`markdown
+<!-- ed-start id="1" -->пример<!-- ed-comm id="1"
+комментарий
+--><!-- ed-end id="1" -->
+\`\`\`
+
+<!-- ed-start id="7" -->Реальный фрагмент<!-- ed-comm id="7"
+Реальный комментарий
+--><!-- ed-end id="7" -->
+`);
+
+    const parsed = parseTaggedMarkdown(markdown);
+
+    expect(parsed.diagnostics).toEqual([]);
+    expect(parsed.annotations).toHaveLength(1);
+    expect(parsed.annotations[0]).toMatchObject({
+      id: 7,
+      fragmentText: 'Реальный фрагмент',
+      comment: 'Реальный комментарий',
+    });
+  });
+
   it('сериализует правки обратно в короткий формат и не меняет id', () => {
     const annotations: EditAnnotation[] = [
       {

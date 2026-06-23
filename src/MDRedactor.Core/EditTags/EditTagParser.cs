@@ -30,8 +30,9 @@ public sealed class EditTagParser
 
         var maxId = 0;
         var searchIndex = 0;
+        var ignoredRanges = FindFencedCodeBlockRanges(markdown);
 
-        while (TryReadNextToken(markdown, searchIndex, out var token))
+        while (TryReadNextToken(markdown, searchIndex, ignoredRanges, out var token))
         {
             if (token.Id is > 0 && token.Id.Value > maxId)
             {
@@ -55,8 +56,9 @@ public sealed class EditTagParser
         var startedIds = new HashSet<int>();
         var current = default(ActiveEdit);
         var position = 0;
+        var ignoredRanges = FindFencedCodeBlockRanges(markdown);
 
-        while (TryReadNextToken(markdown, position, out var token))
+        while (TryReadNextToken(markdown, position, ignoredRanges, out var token))
         {
             stripped.Append(markdown, position, token.StartIndex - position);
 
@@ -286,50 +288,218 @@ public sealed class EditTagParser
             spans);
     }
 
-    private static bool TryReadNextToken(string markdown, int startIndex, out EditTagToken token)
+    private static bool TryReadNextToken(
+        string markdown,
+        int startIndex,
+        IReadOnlyList<TextRange> ignoredRanges,
+        out EditTagToken token)
     {
-        var markerStart = markdown.IndexOf(MarkerPrefix, startIndex, StringComparison.Ordinal);
-        if (markerStart < 0)
-        {
-            token = default;
-            return false;
-        }
+        var searchIndex = startIndex;
 
-        var closeIndex = markdown.IndexOf("-->", markerStart + MarkerPrefix.Length, StringComparison.Ordinal);
-        if (closeIndex < 0)
+        while (searchIndex < markdown.Length)
         {
-            var header = markdown[markerStart..];
+            var markerStart = markdown.IndexOf(MarkerPrefix, searchIndex, StringComparison.Ordinal);
+            if (markerStart < 0)
+            {
+                token = default;
+                return false;
+            }
+
+            if (TryGetContainingRange(ignoredRanges, markerStart, out var range))
+            {
+                searchIndex = Math.Max(range.EndIndex, markerStart + MarkerPrefix.Length);
+                continue;
+            }
+
+            var closeIndex = markdown.IndexOf("-->", markerStart + MarkerPrefix.Length, StringComparison.Ordinal);
+            if (closeIndex < 0)
+            {
+                var header = markdown[markerStart..];
+                token = new EditTagToken(
+                    EditTagKind.Unknown,
+                    null,
+                    markerStart,
+                    markdown.Length,
+                    header,
+                    string.Empty,
+                    markdown.Length,
+                    markdown.Length);
+                return true;
+            }
+
+            var contentStart = markerStart + "<!--".Length;
+            var headerEnd = FindHeaderEnd(markdown, contentStart, closeIndex, out var payloadStart);
+            var headerText = markdown[contentStart..headerEnd].Trim();
+            var kind = GetKind(headerText);
+            var id = TryGetId(headerText);
+            var comment = kind == EditTagKind.Comment
+                ? markdown[payloadStart..closeIndex]
+                : string.Empty;
+
             token = new EditTagToken(
-                EditTagKind.Unknown,
-                null,
+                kind,
+                id,
                 markerStart,
-                markdown.Length,
-                header,
-                string.Empty,
-                markdown.Length,
-                markdown.Length);
+                closeIndex + "-->".Length,
+                headerText,
+                comment,
+                payloadStart,
+                closeIndex);
             return true;
         }
 
-        var contentStart = markerStart + "<!--".Length;
-        var headerEnd = FindHeaderEnd(markdown, contentStart, closeIndex, out var payloadStart);
-        var headerText = markdown[contentStart..headerEnd].Trim();
-        var kind = GetKind(headerText);
-        var id = TryGetId(headerText);
-        var comment = kind == EditTagKind.Comment
-            ? markdown[payloadStart..closeIndex]
-            : string.Empty;
+        token = default;
+        return false;
+    }
 
-        token = new EditTagToken(
-            kind,
-            id,
-            markerStart,
-            closeIndex + "-->".Length,
-            headerText,
-            comment,
-            payloadStart,
-            closeIndex);
+    private static IReadOnlyList<TextRange> FindFencedCodeBlockRanges(string markdown)
+    {
+        var ranges = new List<TextRange>();
+        var lineStart = 0;
+        var openFence = default(MarkdownFence?);
+        var openStart = 0;
+
+        while (lineStart < markdown.Length)
+        {
+            var lineEnd = lineStart;
+            while (lineEnd < markdown.Length && markdown[lineEnd] is not '\r' and not '\n')
+            {
+                lineEnd++;
+            }
+
+            var nextLineStart = lineEnd;
+            if (nextLineStart < markdown.Length && markdown[nextLineStart] == '\r')
+            {
+                nextLineStart++;
+                if (nextLineStart < markdown.Length && markdown[nextLineStart] == '\n')
+                {
+                    nextLineStart++;
+                }
+            }
+            else if (nextLineStart < markdown.Length && markdown[nextLineStart] == '\n')
+            {
+                nextLineStart++;
+            }
+
+            var line = markdown.AsSpan(lineStart, lineEnd - lineStart);
+            if (openFence is null)
+            {
+                if (TryReadOpeningFence(line, out var fence))
+                {
+                    openFence = fence;
+                    openStart = lineStart;
+                }
+            }
+            else if (IsClosingFence(line, openFence.Value))
+            {
+                ranges.Add(new TextRange(openStart, nextLineStart));
+                openFence = null;
+            }
+
+            lineStart = nextLineStart;
+        }
+
+        if (openFence is not null)
+        {
+            ranges.Add(new TextRange(openStart, markdown.Length));
+        }
+
+        return ranges;
+    }
+
+    private static bool TryReadOpeningFence(ReadOnlySpan<char> line, out MarkdownFence fence)
+    {
+        fence = default;
+        var index = SkipOptionalIndent(line);
+        if (index >= line.Length)
+        {
+            return false;
+        }
+
+        var character = line[index];
+        if (character is not '`' and not '~')
+        {
+            return false;
+        }
+
+        var length = CountRepeated(line, index, character);
+        if (length < 3)
+        {
+            return false;
+        }
+
+        fence = new MarkdownFence(character, length);
         return true;
+    }
+
+    private static bool IsClosingFence(ReadOnlySpan<char> line, MarkdownFence fence)
+    {
+        var index = SkipOptionalIndent(line);
+        if (index >= line.Length || line[index] != fence.Character)
+        {
+            return false;
+        }
+
+        var length = CountRepeated(line, index, fence.Character);
+        if (length < fence.Length)
+        {
+            return false;
+        }
+
+        for (var current = index + length; current < line.Length; current++)
+        {
+            if (line[current] is not ' ' and not '\t')
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static int SkipOptionalIndent(ReadOnlySpan<char> line)
+    {
+        var index = 0;
+        while (index < line.Length && index < 3 && line[index] == ' ')
+        {
+            index++;
+        }
+
+        return index;
+    }
+
+    private static int CountRepeated(ReadOnlySpan<char> line, int startIndex, char character)
+    {
+        var index = startIndex;
+        while (index < line.Length && line[index] == character)
+        {
+            index++;
+        }
+
+        return index - startIndex;
+    }
+
+    private static bool TryGetContainingRange(
+        IReadOnlyList<TextRange> ranges,
+        int index,
+        out TextRange containingRange)
+    {
+        foreach (var range in ranges)
+        {
+            if (index < range.StartIndex)
+            {
+                break;
+            }
+
+            if (index >= range.StartIndex && index < range.EndIndex)
+            {
+                containingRange = range;
+                return true;
+            }
+        }
+
+        containingRange = default;
+        return false;
     }
 
     private static int FindHeaderEnd(string markdown, int contentStart, int closeIndex, out int payloadStart)
@@ -556,6 +726,10 @@ internal readonly record struct EditTagToken(
     string Comment,
     int CommentStartIndex,
     int CommentEndIndex);
+
+internal readonly record struct TextRange(int StartIndex, int EndIndex);
+
+internal readonly record struct MarkdownFence(char Character, int Length);
 
 internal enum EditTagKind
 {

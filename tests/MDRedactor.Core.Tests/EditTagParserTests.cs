@@ -56,6 +56,54 @@ public sealed class EditTagParserTests
     }
 
     [Fact]
+    public void Parse_FencedCodeBlockWithEditTagExample_IgnoresTags()
+    {
+        var markdown = Normalize("""
+            # Документация
+
+            ```markdown
+            <!-- ed-start id="1" -->
+            fragment
+            <!-- ed-comm id="1"
+            comment
+            -->
+            <!-- ed-end id="1" -->
+            ```
+
+            После примера.
+            """);
+
+        var document = _parser.Parse(markdown);
+
+        Assert.False(document.HasErrors);
+        Assert.Empty(document.Edits);
+        Assert.Equal(markdown, document.MarkdownWithoutEditMarkup);
+        Assert.Equal(1, _parser.GetNextEditId(markdown));
+    }
+
+    [Fact]
+    public void Parse_EditAfterFencedCodeBlock_StillParsesEdit()
+    {
+        var markdown = Normalize("""
+            ```markdown
+            <!-- ed-start id="1" -->пример<!-- ed-comm id="1"
+            комментарий
+            --><!-- ed-end id="1" -->
+            ```
+
+            <!-- ed-start id="7" -->Реальный фрагмент<!-- ed-comm id="7"
+            Реальный комментарий
+            --><!-- ed-end id="7" -->
+            """);
+
+        var edit = Assert.Single(_parser.GetEdits(markdown));
+
+        Assert.Equal(7, edit.Id);
+        Assert.Equal("Реальный фрагмент", edit.FragmentPlainText);
+        Assert.Equal(8, _parser.GetNextEditId(markdown));
+    }
+
+    [Fact]
     public void GetNextEditId_WithSparseIds_ReturnsMaxPlusOne()
     {
         var markdown = string.Join(

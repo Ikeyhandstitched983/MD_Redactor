@@ -26,6 +26,16 @@ type ActiveEdit = {
   hasError: boolean;
 };
 
+type TextRange = {
+  start: number;
+  end: number;
+};
+
+type MarkdownFence = {
+  character: '`' | '~';
+  length: number;
+};
+
 const markerPrefix = '<!-- ed-';
 const idPattern = /\bid\s*=\s*"(?<id>\d+)"/;
 const statusPattern = /\bstatus\s*=/i;
@@ -175,11 +185,18 @@ export function plainTextFromMarkdown(markdown: string): string {
 
 function* readTokens(markdown: string): Generator<TagToken> {
   let searchIndex = 0;
+  const ignoredRanges = findFencedCodeBlockRanges(markdown);
 
   while (searchIndex < markdown.length) {
     const start = markdown.indexOf(markerPrefix, searchIndex);
     if (start < 0) {
       return;
+    }
+
+    const ignoredRange = findContainingRange(ignoredRanges, start);
+    if (ignoredRange) {
+      searchIndex = Math.max(ignoredRange.end, start + markerPrefix.length);
+      continue;
     }
 
     const close = markdown.indexOf('-->', start + markerPrefix.length);
@@ -216,6 +233,101 @@ function* readTokens(markdown: string): Generator<TagToken> {
 
     searchIndex = close + '-->'.length;
   }
+}
+
+function findFencedCodeBlockRanges(markdown: string): TextRange[] {
+  const ranges: TextRange[] = [];
+  let lineStart = 0;
+  let openFence: MarkdownFence | undefined;
+  let openStart = 0;
+
+  while (lineStart < markdown.length) {
+    let lineEnd = lineStart;
+    while (lineEnd < markdown.length && markdown[lineEnd] !== '\r' && markdown[lineEnd] !== '\n') {
+      lineEnd += 1;
+    }
+
+    let nextLineStart = lineEnd;
+    if (nextLineStart < markdown.length && markdown[nextLineStart] === '\r') {
+      nextLineStart += 1;
+      if (nextLineStart < markdown.length && markdown[nextLineStart] === '\n') {
+        nextLineStart += 1;
+      }
+    } else if (nextLineStart < markdown.length && markdown[nextLineStart] === '\n') {
+      nextLineStart += 1;
+    }
+
+    const line = markdown.slice(lineStart, lineEnd);
+    if (!openFence) {
+      const fence = readOpeningFence(line);
+      if (fence) {
+        openFence = fence;
+        openStart = lineStart;
+      }
+    } else if (isClosingFence(line, openFence)) {
+      ranges.push({ start: openStart, end: nextLineStart });
+      openFence = undefined;
+    }
+
+    lineStart = nextLineStart;
+  }
+
+  if (openFence) {
+    ranges.push({ start: openStart, end: markdown.length });
+  }
+
+  return ranges;
+}
+
+function readOpeningFence(line: string): MarkdownFence | undefined {
+  const index = skipOptionalIndent(line);
+  if (index >= line.length) {
+    return undefined;
+  }
+
+  const character = line[index];
+  if (character !== '`' && character !== '~') {
+    return undefined;
+  }
+
+  const length = countRepeated(line, index, character);
+  return length >= 3 ? { character, length } : undefined;
+}
+
+function isClosingFence(line: string, fence: MarkdownFence): boolean {
+  const index = skipOptionalIndent(line);
+  if (index >= line.length || line[index] !== fence.character) {
+    return false;
+  }
+
+  const length = countRepeated(line, index, fence.character);
+  if (length < fence.length) {
+    return false;
+  }
+
+  return line.slice(index + length).trim() === '';
+}
+
+function skipOptionalIndent(line: string): number {
+  let index = 0;
+  while (index < line.length && index < 3 && line[index] === ' ') {
+    index += 1;
+  }
+
+  return index;
+}
+
+function countRepeated(line: string, start: number, character: string): number {
+  let index = start;
+  while (index < line.length && line[index] === character) {
+    index += 1;
+  }
+
+  return index - start;
+}
+
+function findContainingRange(ranges: TextRange[], index: number): TextRange | undefined {
+  return ranges.find((range) => index >= range.start && index < range.end);
 }
 
 function findHeaderEnd(markdown: string, contentStart: number, close: number): { headerEnd: number; payloadStart: number } {
